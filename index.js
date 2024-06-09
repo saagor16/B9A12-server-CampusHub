@@ -91,21 +91,7 @@ const verifyAdmin = async (req, res, next) => {
       }
     });
 
-// Get meal details by ID
-app.get("/meals/:id", async (req, res) => {
-  const id = req.params.id;
 
-  try {
-    const meal = await mealsCollection.findOne({ _id: new ObjectId(id) });
-    if (!meal) {
-      return res.status(404).json({ error: "Meal not found" });
-    }
-    res.json(meal);
-  } catch (error) {
-    console.error("Error fetching meal data:", error);
-    res.status(500).send({ message: "Error fetching meal data" });
-  }
-});
     // Get meal count
     app.get('/meals/count', async (req, res) => {
       try {
@@ -119,6 +105,7 @@ app.get("/meals/:id", async (req, res) => {
         res.status(500).send({ message: 'Server error' });
       }
     });
+
 
     // Like/Dislike a meal
 app.post('/meals/:id/like', verifyToken, async (req, res) => {
@@ -158,32 +145,31 @@ app.post('/meals/:id/like', verifyToken, async (req, res) => {
       }
     });
     // Add a review to a meal
-app.post('/reviews', verifyToken, async (req, res) => {
-  const review = req.body;
-  try {
-    const result = await reviewsCollection.insertOne(review);
-    res.send(result.ops[0]);
-  } catch (error) {
-    res.status(500).send({ message: 'Error adding review' });
-  }
-});
+    app.post('/reviews', verifyToken, async (req, res) => {
+      const review = req.body;
+      review.userEmail = req.decoded.email;
+      review.createdAt = new Date();
+    
+      try {
+        const result = await reviewsCollection.insertOne(review);
+        res.send(result.ops[0]);
+      } catch (error) {
+        res.status(500).send({ message: 'Error adding review' });
+      }
+    });
+    app.get('/reviews/:email', verifyToken, async (req, res) => {
+      const email = req.params.email;
+    
+      try {
+        const reviews = await reviewsCollection.find({ userEmail: email }).toArray();
+        res.send(reviews);
+      } catch (error) {
+        res.status(500).send({ message: 'Error retrieving reviews' });
+      }
+    });
+    
 
-
-    // Add a review to a meal
-app.post('/meals/:id/reviews', verifyToken, async (req, res) => {
-  const id = req.params.id;
-  const review = req.body;
-  review.mealId = new ObjectId(id);
-  review.userId = new ObjectId(req.decoded._id);
-  review.createdAt = new Date();
-
-  try {
-    const result = await reviewsCollection.insertOne(review);
-    res.send(result.ops[0]);
-  } catch (error) {
-    res.status(500).send({ message: 'Error adding review' });
-  }
-});
+   
 
 // Get reviews for a meal
 app.get('/meals/:id/reviews', async (req, res) => {
@@ -198,6 +184,27 @@ app.get('/meals/:id/reviews', async (req, res) => {
     res.send(reviews);
   } catch (error) {
     res.status(500).send({ message: 'Error retrieving reviews' });
+  }
+});
+
+ // Add a review to a meal
+ app.post('/meals/:id/reviews', verifyToken, async (req, res) => {
+  const id = req.params.id;
+  const { text, userId, userEmail, userName } = req.body;
+  const review = {
+    text,
+    userId: new ObjectId(userId),
+    userEmail,
+    userName,
+    mealId: new ObjectId(id),
+    createdAt: new Date(),
+  };
+
+  try {
+    const result = await reviewsCollection.insertOne(review);
+    res.send(result.ops[0]);
+  } catch (error) {
+    res.status(500).send({ message: 'Error adding review' });
   }
 });
 
@@ -323,19 +330,31 @@ app.get('/meals/:id/reviews', async (req, res) => {
       }
     });
 
-    // Change meal status to delivered
-    app.patch('/serveMeals/:id/delivered', async (req, res) => {
-      const id = req.params.id;
-      try {
-        const result = await mealRequestsCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { status: 'delivered' } }
-        );
-        res.send(result);
-      } catch (error) {
-        res.status(500).send({ message: 'Error updating meal status' });
-      }
-    });
+// Update meal request status to "delivered"
+app.patch('/serveMeals/:id/delivered', verifyToken, async (req, res) => {
+  const { id } = req.params;
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ message: 'Invalid meal request ID' });
+  }
+
+  try {
+    const filter = { _id: new ObjectId(id) };
+    const update = { $set: { status: 'delivered' } };
+
+    const result = await mealRequestsCollection.updateOne(filter, update);
+
+    if (result.modifiedCount === 1) {
+      const updatedRequest = await mealRequestsCollection.findOne(filter);
+      res.send(updatedRequest);
+    } else {
+      res.status(404).send({ message: 'Meal request not found or already delivered' });
+    }
+  } catch (error) {
+    console.error('Error updating meal request status:', error);
+    res.status(500).send({ message: 'Internal server error' });
+  }
+});
 
     // Confirm successful connection
     await client.db("admin").command({ ping: 1 });
