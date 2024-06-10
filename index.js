@@ -7,7 +7,15 @@ require('dotenv').config();
 const { MongoClient, ObjectId, ServerApiVersion } = require('mongodb');
 const port = process.env.PORT || 5000;
 // Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "",
+      "",
+    ]
+  })
+);
 app.use(express.json());
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.c5ebkxr.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 const client = new MongoClient(uri, {
